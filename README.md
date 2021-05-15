@@ -15,7 +15,7 @@ Install this plugin in the same environment as Datasette.
 
 ## Usage
 
-Usage instructions go here.
+This plugin adds a database which will be populated with users, actions and resources that are requested from the various parts of Datasette. You can set configuration by granting access to users/groups to actions/resources via the `permissions` table.
 
 ## Development
 
