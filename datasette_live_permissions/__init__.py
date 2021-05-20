@@ -96,10 +96,8 @@ def create_tables(datasette=None):
             "actions_resources_id": int,
             "user_id": int,
             "group_id": int,
-            "allow": bool,
         }, pk="id", not_null=[
             "actions_resources_id",
-            "allow",
         ], foreign_keys=(
             ("user_id", "users", "id"),
             ("group_id", "groups", "id"),
@@ -160,37 +158,6 @@ def flat_ids(rows):
     return ",".join([str(r["id"]) for r in rows])
 
 
-# TODO: allow people to create groups
-# groups can have users
-# resources must have actions
-# permissions can have users and groups and action and resource and allow/deny
-
-def check_permission(actor, action, resource, db, authed_users, relevant_actions):
-    # TODO: find groups
-    group_ids = ""
-    user_ids = ",".join([
-        str(a[0]) for a in authed_users or []
-    ])
-    ar_ids = ",".join([
-        str(a[0]) for a in relevant_actions or []
-    ])
-
-    cond = " and ".join([
-        f"actions_resources_id in ({ar_ids})",
-        f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
-        "allow=true",
-    ])
-    print("cond", cond)
-    perms = [p for p in db["permissions"].rows_where(cond)]
-    print("perms", perms)
-
-    for perm in perms:
-        print("Access granted")
-        return True
-    print("Access denied")
-    return False
-
-
 def get_lookups(db):
     # TODO: replace with a separate lookup table
     return db.execute(
@@ -198,22 +165,34 @@ def get_lookups(db):
     ).fetchall()
 
 
-def bootstrap_fetch_user(db, actor):
+def bootstrap_and_fetch_users(db, actor):
+    """
+    This method does two things: it looks for users relevant to a permission check
+    based on the actor provided by Datasette in this request. If users can't be found,
+    one will be created so that it's easier for end users to manage permissions (since
+    Datasette has no "users" table).
+
+    Note that this also returns the "everyone" user regardless of if logged-in
+    users are also found. This simplifies permission checks on the perms table.
+    """
     users = db["users"]
-    if actor is None:
-        data = {"lookup": "actor", "value": actor}
-        query = (
-            "select id from [users] "
-            "where lookup = :lookup and value is null"
-        )
-        results = db.execute(query, data).fetchall()
-        print(query, data, "results", results)
-        if not len(results):
-            users.insert(data, pk="id", replace=True)
+    relevant_users = []
+    # unauthenticated user (get or create)
+    data = {"lookup": "actor", "value": actor}
+    query = (
+        "select id from [users] "
+        "where lookup = :lookup and value is null"
+    )
+    results = db.execute(query, data).fetchall()
+    print(query, data, "results", results)
+    if not len(results):
+        users.insert(data, pk="id", replace=True)
+    else:
+        relevant_users += results
 
     # we have a logged-in user, use the lookups in our DB to
     # find possible matches
-    else:
+    if actor is not None:
         lookups = get_lookups(db)
         print("lookups", lookups)
         # this could probably be cleaned up significantly, but basically
@@ -245,12 +224,13 @@ def bootstrap_fetch_user(db, actor):
                 # just do the first one for now, people can
                 # figure out other ways to do lookups from
                 # the examples
+                break
         else:
-            return results
-    return []
+            relevant_users += results
+    return relevant_users
 
 
-def bootstrap_fetch_actions_resources(db, action, resource):
+def bootstrap_and_fetch_actions_resources(db, action, resource):
     ar = db["actions_resources"]
 
     relevant_actions = []
@@ -281,8 +261,24 @@ def bootstrap_fetch_actions_resources(db, action, resource):
                 ar.insert(data, pk="id", replace=True)
             else:
                 relevant_actions += results
+
         # NOTE: we probably don't need this since resources always have actions
+        # we could rely on
         elif isinstance(resource, (tuple, list)) and len(resource) == 2:
+            # do a primary only query first
+            data = {"action": action, "resource_primary": resource}
+            resource_primary_cond = "is null"
+            if resource:
+                resource_primary_cond = "= :resource_primary"
+            query = (
+                "select id from actions_resources "
+                f"where action = :action and resource_primary {resource_primary_cond}"
+            )
+            results = db.execute(query, data).fetchall()
+            if len(results):
+                relevant_actions += results
+
+            # then do a primary w/ secondary check
             resource_primary, resource_secondary = resource
             data = {"action": action,
                     "resource_primary": resource_primary,
@@ -301,9 +297,12 @@ def bootstrap_fetch_actions_resources(db, action, resource):
             )
             results = db.execute(query, data).fetchall()
             if not len(results):
+                # only do the insert here for primary w/ secondary
+                # (and not above) because this one is user-initiated
                 ar.insert(data, pk="id", replace=True)
             else:
                 relevant_actions += results
+
         # TODO: figure out a better way to store more complex resources. one
         # idea is to have a table that expresses more complex lookups, similar
         # to my plans with users. For now, just serialize the resource and
@@ -313,7 +312,32 @@ def bootstrap_fetch_actions_resources(db, action, resource):
             # data = {"action": action, "resource": json.dumps(resource)}
             return None
 
-    return relevant_actions
+    return relevant_actions or None
+
+
+# TODO: allow people to create groups
+# groups can have users
+# resources must have actions
+# permissions can have users and groups and action and resource and allow/deny
+def check_permission(actor, action, resource, db, authed_users, relevant_actions):
+    # TODO: find groups
+    group_ids = ""
+    user_ids = ",".join([
+        str(a[0]) for a in authed_users or []
+    ])
+    ar_ids = ",".join([
+        str(a[0]) for a in relevant_actions or []
+    ])
+    cond = " and ".join([
+        f"actions_resources_id in ({ar_ids})",
+        f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
+    ])
+    print("cond", cond)
+    perms = [p for p in db["permissions"].rows_where(cond)]
+    print("perms", perms)
+    for perm in perms:
+        print("Access granted")
+        return True
 
 
 # TODO: on permission requested: lookup permission in DB
@@ -325,30 +349,10 @@ def bootstrap_fetch_actions_resources(db, action, resource):
 def permission_allowed(actor, action, resource):
     async def inner_permission_allowed():
         db = get_db()
-
-        authed_users = bootstrap_fetch_user(db, actor)
+        authed_users = bootstrap_and_fetch_users(db, actor)
         print("authed_users", authed_users)
-
-        relevant_actions = bootstrap_fetch_actions_resources(db, action, resource)
-        # Spitballing here ...
-        # permissions = permission_found(
-        #     select permission where allowed=true and ((
-        #         permission_action = action
-
-        #     ) or (
-        #     ))
-        # )
-
-        # # select * from resources where id = resource;
-        # trackartist IS NULL OR EXISTS(
-
-        # # get users where user_id = actor.id and
-        # actor
-        # actor_groups
-        # # Returning None falls back to default permissions
-        # pass
-        # TODO: something like this...
-        # actor_groups = get_groups(actor.id) # select * from groups where user_id=user_id;
+        relevant_actions = bootstrap_and_fetch_actions_resources(db, action, resource)
+        print("relevant_actions", relevant_actions)
         return check_permission(actor, action, resource, db, authed_users, relevant_actions)
 
     return inner_permission_allowed
