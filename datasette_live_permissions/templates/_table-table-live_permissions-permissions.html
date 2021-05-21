@@ -1,0 +1,175 @@
+{% if display_rows %}
+<div class="table-wrapper">
+    <table class="rows-and-columns">
+        <thead>
+            <tr>
+                {% for column in display_columns %}
+                    <th class="col-{{ column.name|to_css_class }}" scope="col" data-column="{{ column.name }}" data-column-type="{{ column.type }}" data-column-not-null="{{ column.notnull }}" data-is-pk="{% if column.is_pk %}1{% else %}0{% endif %}">
+                        {% if not column.sortable %}
+                            {{ column.name }}
+                        {% else %}
+                            {% if column.name == sort %}
+                                <a href="{{ path_with_replaced_args(request, {'_sort_desc': column.name, '_sort': None, '_next': None}) }}" rel="nofollow">{{ column.name }}&nbsp;▼</a>
+                            {% else %}
+                                <a href="{{ path_with_replaced_args(request, {'_sort': column.name, '_sort_desc': None, '_next': None}) }}" rel="nofollow">{{ column.name }}{% if column.name == sort_desc %}&nbsp;▲{% endif %}</a>
+                            {% endif %}
+                        {% endif %}
+                    </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in display_rows %}
+            <tr>
+                {% for cell in row %}
+                    <td class="col-{{ cell.column|to_css_class }} type-{{ cell.value_type }}">{{ cell.value }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+    <p class="zero-results">0 records</p>
+{% endif %}
+
+<style>
+#live-permissions-app form {
+  padding: 20px;
+  margin: 20px;
+  border: 1px dotted #666;
+}
+#live-permissions-app label {
+  width: 100%
+}
+#live-permissions-app label span.label-text {
+  display: inline-block;
+  min-width: 60px;
+}
+#live-permissions-app .either-or {
+  border: 1px dotted #aaa;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px;
+}
+#live-permissions-app .or-text {
+  color: #999;
+  text-align: left;
+  margin: 0 0 0 10px;
+}
+</style>
+
+<div id="live-permissions-app">
+  <form action="/-/live-permissions/permissions/new" method="post">
+    <p class="new-permission">
+    Add a new permission.
+    </p>
+    <label for="actions-resources-id">
+      <span class="label-text">Action</span>
+      <select id="actions-resources-id" name="actions_resources_id" style="width: 50%"></select>
+    </label>
+    <div class="either-or">
+      <label for="user-id">
+        <span class="label-text">User</span>
+        <select id="user-id" name="user_id" style="width: 50%"></select>
+      </label>
+      <p class="or-text">or...</p>
+      <label for="group-id">
+        <span class="label-text">Group</span>
+        <select id="group-id" name="group_id" style="width: 50%"></select>
+      </label>
+    </div>
+    <input type="hidden" name="csrftoken" value="{{ csrftoken() }}" />
+    <input type="submit" value="Save" />
+  </form>
+</div>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+  function setup() {
+    $('#actions-resources-id').select2({
+      placeholder: 'Select an action',
+      ajax: {
+        url: '/live_permissions/actions_resources.json',
+        dataType: 'json',
+        data: function (params) {
+          return {
+            action__contains: params.term,
+            _shape: 'array',
+            _sort: 'id',
+            _size: 'max',
+          };
+        },
+        processResults: function (data) {
+          return {
+            results: data.map((rec) => {
+              let text = rec.action;
+              if (rec.resource_primary) {
+                text += `: ${rec.resource_primary}`;
+              }
+              if (rec.resource_secondary) {
+                text += `, ${rec.resource_secondary}`;
+              }
+              return {id: rec.id, text};
+            }),
+          };
+        },
+      }
+    });
+
+    $('#user-id').select2({
+      placeholder: 'Select a user',
+      ajax: {
+        url: '/live_permissions/users.json',
+        dataType: 'json',
+        data: function (params) {
+          return {
+            value__contains: params.term,
+            _shape: 'array',
+            _sort: 'id',
+            _size: 'max',
+          };
+        },
+        processResults: function (data) {
+          return {
+            results: data.map((rec) => {
+              let text = `${rec.lookup} => ${rec.value}`;
+              if (rec.description) {
+                text += ` (${rec.description})`;
+              }
+              return {id: rec.id, text: text};
+            }),
+          };
+        },
+      }
+    });
+
+    $('#group-id').select2({
+      placeholder: 'Select a group',
+      ajax: {
+        url: '/live_permissions/groups.json',
+        dataType: 'json',
+        data: function (params) {
+          return {
+            name__contains: params.term,
+            _shape: 'array',
+            _sort: 'id',
+            _size: 'max',
+          };
+        },
+        processResults: function (data) {
+          return {
+            results: data.map((rec) => {
+              return {id: rec.id, text: rec.name};
+            }),
+          };
+        },
+      }
+    });
+
+  }
+
+  $(document).ready(setup);
+</script>

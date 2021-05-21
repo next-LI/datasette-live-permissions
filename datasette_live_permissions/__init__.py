@@ -1,18 +1,21 @@
 import json
 import os
+import re
 import sqlite3
 
 import sqlite_utils
 from datasette import hookimpl, database as ds_database
+from datasette.utils.asgi import Response, Forbidden
 
 
 DB_NAME="live_permissions"
 DEFAULT_DBPATH="."
 
 
-# used to check all required tables exist
+# used to check all required tables exist and for table specified
+# in the CRUD endpoint
 KNOWN_TABLES = [
-    "users", "groups", "actions_resources", "permissions"
+    "users", "groups", "group-membership", "actions_resources", "permissions"
 ]
 
 
@@ -62,19 +65,38 @@ def create_tables(datasette=None):
         }, not_null=[
             "lookup"
         ], pk="id")
+        database["users"].insert({
+            "id": 1,
+            "description": "Root account",
+            "lookup": "actor.id",
+            "value": "root",
+        }, pk="id", replace=True)
+        database["users"].insert({
+            "id": 2,
+            "description": "Unauthenticated users",
+            "lookup": "actor",
+            "value": None,
+        }, pk="id", replace=True)
 
-    # We need a lookup "through" table here
-    # if "groups" not in table_names:
-    #     database["groups"].create({
-    #         "id": int,
-    #         "user_id": int,
-    #     }, pk="id", foreign_keys=(
-    #         ("user_id", "users", "id"),
-    #     ))
-    # if "groups" not in table_names:
-    #     database["groups"].lookup({
-    #         "user_id": int
-    #     })
+    if "groups" not in table_names:
+        database["groups"].create({
+            "id": int,
+            "name": str,
+        }, pk="id")
+        database["groups"].insert({
+            "id": 1,
+            "name": "Auto-added users",
+        }, pk="id", replace=True)
+
+    if "group-membership" not in table_names:
+        database["group-membership"].create({
+            "group_id": int,
+            "user_id": int,
+        }, pk=("group_id", "user_id"))
+        database["group-membership"].insert({
+            "user_id": 1,
+            "group_id": 1,
+        }, pk=("group_id", "user_id"), replace=True)
 
     if "actions_resources" not in table_names:
         database["actions_resources"].create({
@@ -184,7 +206,7 @@ def bootstrap_and_fetch_users(db, actor):
         "where lookup = :lookup and value is null"
     )
     results = db.execute(query, data).fetchall()
-    print(query, data, "results", results)
+    print("-", query, data, "results", results)
     if not len(results):
         users.insert(data, pk="id", replace=True)
     else:
@@ -194,7 +216,7 @@ def bootstrap_and_fetch_users(db, actor):
     # find possible matches
     if actor is not None:
         lookups = get_lookups(db)
-        print("lookups", lookups)
+        print("-", "lookups", lookups)
         # this could probably be cleaned up significantly, but basically
         # we just want to build the query and also fetch the user ID(s??)
         # for the matching user
@@ -208,11 +230,11 @@ def bootstrap_and_fetch_users(db, actor):
             lookup_values[lookup] = value
             lookup_clauses.append("(lookup = ? and value = ?)")
             lookup_args.append(value)
-        print("lookup_clauses", lookup_clauses)
-        print("lookup_args", lookup_args)
+        print("-", "lookup_clauses", lookup_clauses)
+        print("-", "lookup_args", lookup_args)
         where_conditions = " or ".join(lookup_clauses)
         query = f"select id from [users] where {where_conditions}"
-        print("query", query)
+        print("-", "query", query)
         results = db.execute(query, lookup_args).fetchall()
         if not len(results):
             for lookup, value in lookup_values.items():
@@ -239,12 +261,7 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
         query = "select id from actions_resources where action = :action"
         relevant_actions = db.execute(query, data).fetchall()
         if not len(relevant_actions):
-            # we won't consider newly added actions for check below
-            ar.insert(data, pk="id", replace=True).m2m(
-                "groups", lookup={
-                    "name": "Auto-added users"
-                }
-            )
+            ar.insert(data, pk="id", replace=True)
 
     if resource and action:
         if isinstance(resource, str):
@@ -265,8 +282,10 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
         # NOTE: we probably don't need this since resources always have actions
         # we could rely on
         elif isinstance(resource, (tuple, list)) and len(resource) == 2:
+            resource_primary, resource_secondary = resource
+
             # do a primary only query first
-            data = {"action": action, "resource_primary": resource}
+            data = {"action": action, "resource_primary": resource_primary}
             resource_primary_cond = "is null"
             if resource:
                 resource_primary_cond = "= :resource_primary"
@@ -279,7 +298,6 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
                 relevant_actions += results
 
             # then do a primary w/ secondary check
-            resource_primary, resource_secondary = resource
             data = {"action": action,
                     "resource_primary": resource_primary,
                     "resource_secondary": resource_secondary}
@@ -308,7 +326,7 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
         # to my plans with users. For now, just serialize the resource and
         # leave it at that
         else:
-            print(f"Unrecognized data type for resource: '{resource}'")
+            print("-", f"Unrecognized data type for resource: '{resource}'")
             # data = {"action": action, "resource": json.dumps(resource)}
             return None
 
@@ -332,11 +350,11 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
         f"actions_resources_id in ({ar_ids})",
         f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
     ])
-    print("cond", cond)
+    print("-", "cond", cond)
     perms = [p for p in db["permissions"].rows_where(cond)]
-    print("perms", perms)
+    print("-", "perms", perms)
     for perm in perms:
-        print("Access granted")
+        print("-", "Access granted")
         return True
 
 
@@ -350,9 +368,52 @@ def permission_allowed(actor, action, resource):
     async def inner_permission_allowed():
         db = get_db()
         authed_users = bootstrap_and_fetch_users(db, actor)
-        print("authed_users", authed_users)
+        print("-", "authed_users", authed_users)
         relevant_actions = bootstrap_and_fetch_actions_resources(db, action, resource)
-        print("relevant_actions", relevant_actions)
+        print("-", "relevant_actions", relevant_actions)
         return check_permission(actor, action, resource, db, authed_users, relevant_actions)
 
     return inner_permission_allowed
+
+
+@hookimpl
+def register_routes():
+    return [
+        (r"^/-/live-permissions/(?P<table>.*)/(?P<id>.*)/?$", perms_crud),
+    ]
+
+
+async def perms_crud(scope, receive, datasette, request):
+    table = request.url_vars["table"]
+    obj_id = request.url_vars["id"]
+    next = request.args.get("next", f"/live_permissions/{table}")
+
+    if not await datasette.permission_allowed(
+        request.actor, "live-permissions-edit", default=False
+    ):
+        raise Forbidden("Permission denied")
+
+    assert table and obj_id, "Invalid URL"
+    assert request.method in ["POST", "DELETE"], "Bad method"
+    assert table in KNOWN_TABLES, "Bad table name provided"
+    assert obj_id == "new" or re.match(r"[0-9]+", obj_id), "Bad id provided"
+
+    db = get_db(datasette=datasette)
+    # POST is just dual update/create (depending on if id=="new")
+    if request.method == "POST":
+        formdata = await request.post_vars()
+
+        if "csrftoken" in formdata:
+            del formdata["csrftoken"]
+
+        pk = "id"
+        if table == "group-membership":
+            pk = ("group_id", "user_id")
+        db[table].insert(
+            formdata, pk=pk, alter=False, replace=True
+        )
+        return Response.redirect(next)
+
+    elif request.method == "DELETE":
+        db[table].delete(obj_id)
+        return Response.redirect(next)

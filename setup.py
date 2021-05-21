@@ -1,7 +1,7 @@
 from setuptools import setup
 import os
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 
 def get_long_description():
@@ -32,7 +32,7 @@ setup(
     extras_require={"test": ["pytest", "pytest-asyncio"]},
     tests_require=["datasette-live-permissions[test]"],
     package_data={
-        "datasette_live_permissions": ["static/*", "templates/*"]
+        "datasette_live_permissions": ["templates/*"]
     },
     python_requires=">=3.6",
 )
