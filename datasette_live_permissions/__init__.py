@@ -65,6 +65,9 @@ def create_tables(datasette=None):
         }, not_null=[
             "lookup"
         ], pk="id")
+        database["users"].create_index([
+            "lookup", "value",
+        ], unique=True)
         database["users"].insert({
             "id": 1,
             "description": "Root account",
@@ -87,6 +90,9 @@ def create_tables(datasette=None):
             "id": 1,
             "name": "Auto-added users",
         }, pk="id", replace=True)
+        database["groups"].create_index([
+            "name",
+        ], unique=True)
 
     if "group-membership" not in table_names:
         database["group-membership"].create({
@@ -227,7 +233,8 @@ def bootstrap_and_fetch_users(db, actor):
             lookup = row[0]
             lookup_args.append(lookup)
             value = user_lookup(actor, lookup)
-            lookup_values[lookup] = value
+            if value:
+                lookup_values[lookup] = value
             lookup_clauses.append("(lookup = ? and value = ?)")
             lookup_args.append(value)
         print("-", "lookup_clauses", lookup_clauses)
@@ -237,8 +244,10 @@ def bootstrap_and_fetch_users(db, actor):
         print("-", "query", query)
         results = db.execute(query, lookup_args).fetchall()
         if not len(results):
+            # github auth check, add it if we don't have it added already
+            if "gh_email" in actor and "gh_email" not in lookup_values:
+                lookup_values["gh_email"] = actor.get("gh_email")
             for lookup, value in lookup_values.items():
-                if not value: continue
                 users.insert({
                     "lookup": lookup,
                     "value": value,
@@ -249,6 +258,7 @@ def bootstrap_and_fetch_users(db, actor):
                 break
         else:
             relevant_users += results
+
     return relevant_users
 
 
