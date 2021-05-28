@@ -212,7 +212,6 @@ def bootstrap_and_fetch_users(db, actor):
         "where lookup = :lookup and value is null"
     )
     results = db.execute(query, data).fetchall()
-    print("-", query, data, "results", results)
     if not len(results):
         users.insert(data, pk="id", replace=True)
     else:
@@ -222,7 +221,6 @@ def bootstrap_and_fetch_users(db, actor):
     # find possible matches
     if actor is not None:
         lookups = get_lookups(db)
-        print("-", "lookups", lookups)
         # this could probably be cleaned up significantly, but basically
         # we just want to build the query and also fetch the user ID(s??)
         # for the matching user
@@ -237,16 +235,13 @@ def bootstrap_and_fetch_users(db, actor):
                 lookup_values[lookup] = value
             lookup_clauses.append("(lookup = ? and value = ?)")
             lookup_args.append(value)
-        print("-", "lookup_clauses", lookup_clauses)
-        print("-", "lookup_args", lookup_args)
         where_conditions = " or ".join(lookup_clauses)
         query = f"select id from [users] where {where_conditions}"
-        print("-", "query", query)
         results = db.execute(query, lookup_args).fetchall()
         if not len(results):
             # github auth check, add it if we don't have it added already
-            if "gh_email" in actor and "gh_email" not in lookup_values:
-                lookup_values["gh_email"] = actor.get("gh_email")
+            if "gh_email" in actor and "actor.gh_email" not in lookup_values:
+                lookup_values["actor.gh_email"] = actor.get("gh_email")
             for lookup, value in lookup_values.items():
                 users.insert({
                     "lookup": lookup,
@@ -336,8 +331,6 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
         # to my plans with users. For now, just serialize the resource and
         # leave it at that
         else:
-            print("-", f"Unrecognized data type for resource: '{resource}'")
-            # data = {"action": action, "resource": json.dumps(resource)}
             return None
 
     return relevant_actions or None
@@ -360,11 +353,8 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
         f"actions_resources_id in ({ar_ids})",
         f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
     ])
-    print("-", "cond", cond)
     perms = [p for p in db["permissions"].rows_where(cond)]
-    print("-", "perms", perms)
     for perm in perms:
-        print("-", "Access granted")
         return True
 
 
@@ -378,9 +368,7 @@ def permission_allowed(actor, action, resource):
     async def inner_permission_allowed():
         db = get_db()
         authed_users = bootstrap_and_fetch_users(db, actor)
-        print("-", "authed_users", authed_users)
         relevant_actions = bootstrap_and_fetch_actions_resources(db, action, resource)
-        print("-", "relevant_actions", relevant_actions)
         return check_permission(actor, action, resource, db, authed_users, relevant_actions)
 
     return inner_permission_allowed
