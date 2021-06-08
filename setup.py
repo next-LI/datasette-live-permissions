@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 
 
-VERSION = "0.4.2"
+VERSION = "0.4.5"
 
 
 def get_long_description():
@@ -29,7 +29,7 @@ setup(
     version=VERSION,
     packages=["datasette_live_permissions"],
     entry_points={"datasette": ["live_permissions = datasette_live_permissions"]},
-    install_requires=["datasette"],
+    # install_requires=["datasette"],
     extras_require={"test": ["pytest", "pytest-asyncio"]},
     tests_require=["datasette-live-permissions[test]"],
     package_data={

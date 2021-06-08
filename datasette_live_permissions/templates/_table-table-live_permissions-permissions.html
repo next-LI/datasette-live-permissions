@@ -1,3 +1,4 @@
+{# NOTE: Based on this Datasette template: datasette/datasette/templates/_table.html #}
 {% if display_rows %}
 <div class="table-wrapper">
     <table class="rows-and-columns">
@@ -86,7 +87,6 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
 <script>
   function setup() {
     $('#actions-resources-id').select2({
@@ -98,7 +98,6 @@
           return {
             action__contains: params.term,
             _shape: 'array',
-            _sort: 'id',
             _size: 'max',
           };
         },
@@ -128,7 +127,6 @@
           return {
             value__contains: params.term,
             _shape: 'array',
-            _sort: 'id',
             _size: 'max',
           };
         },
@@ -155,7 +153,6 @@
           return {
             name__contains: params.term,
             _shape: 'array',
-            _sort: 'id',
             _size: 'max',
           };
         },
@@ -173,3 +170,5 @@
 
   $(document).ready(setup);
 </script>
+
+<!-- <script src="/-/static-plugins/datasette-live-permissions/editor.js"></script> -->

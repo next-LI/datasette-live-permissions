@@ -15,7 +15,7 @@ DEFAULT_DBPATH="."
 # used to check all required tables exist and for table specified
 # in the CRUD endpoint
 KNOWN_TABLES = [
-    "users", "groups", "group-membership", "actions_resources", "permissions"
+    "users", "groups", "group_membership", "actions_resources", "permissions"
 ]
 
 
@@ -37,21 +37,73 @@ def get_db(datasette=None):
     return db
 
 
+def setup_default_permissions():
+    # A list of datasette-provided defaults. Some of these fields are
+    # just informational, like description and default. For each here,
+    # we'll add it to the actions-resources DB to bootstrap. If one of
+    # these items has "set_to" then the query will be executed and
+    # the resulting users will be given access in the permissions table.
+    default_ars = [{
+        "action": "view-instance",
+        "allow_users": "lookup='actor' and value is null",
+    }, {
+        # Actor is allowed to view all databases
+        # default: allow
+        "action": "view-database",
+    }, {
+        "action": "view-database",
+        "resource_primary": "live_permissions",
+        "allow_users": "lookup='actor.id' and value='root'",
+    }, {
+        # Actor is allowed to download all databases",
+        # default: allow
+        "action": "view-database-download",
+        "allow_users": "lookup='actor.id' and value='root'",
+    }, {
+        # Actor is allowed to run arbitrary SQL queries against databases
+        # default: allow
+        "action": "execute-sql",
+        "resource_primary": "live_permissions",
+        "allow_users": "lookup='actor.id' and value='root'",
+    }, {
+        # Actor is allowed to view the /-/permissions debug page.
+        # default: deny,
+        "action": "permissions-debug",
+    }, {
+        # Controls if the various debug pages are displayed in the
+        # navigation menu.
+        # "default": "deny",
+        "action": "debug-menu",
+    }]
+
+    db = get_db()
+    ar_tbl = db["actions_resources"]
+    users = db["users"]
+    for default_ar in default_ars:
+        print("default_ar", default_ar)
+        ar_data = {
+            "action": default_ar["action"],
+            "resource_primary": default_ar.get("resource_primary")
+        }
+        result = ar_tbl.insert(ar_data, pk="id", replace=True)
+        print("result", result)
+
+        if "allow_users" not in default_ar:
+            continue
+
+        for u in users.rows_where(default_ar["allow_users"]):
+            print("User", u)
+            for ar in ar_tbl.rows_where(make_query("", ar_data), ar_data):
+                print("AR", ar)
+                db["permissions"].insert({
+                    "actions_resources_id": ar["id"],
+                    "user_id": u["id"],
+                }, replace=True)
+
+
 def create_tables(datasette=None):
     database = get_db(datasette=datasette)
     table_names = database.table_names()
-
-    # TODO: create some defaults
-    # actions resources:
-    # - view-instance
-    # - view-database
-    # maybe create some sane defaults?
-    # users:
-    # - unauthenticated user
-    # - root user
-    # - if github plugin installed, an example gh_email?
-    # permissions:
-    # - view-instance to unauthenticated?
 
     # TODO: user lookup -> use a lookup table! then
     # we can use the lookup table to actually perform
@@ -94,12 +146,12 @@ def create_tables(datasette=None):
             "name",
         ], unique=True)
 
-    if "group-membership" not in table_names:
-        database["group-membership"].create({
+    if "group_membership" not in table_names:
+        database["group_membership"].create({
             "group_id": int,
             "user_id": int,
         }, pk=("group_id", "user_id"))
-        database["group-membership"].insert({
+        database["group_membership"].insert({
             "user_id": 1,
             "group_id": 1,
         }, pk=("group_id", "user_id"), replace=True)
@@ -141,6 +193,7 @@ def create_tables(datasette=None):
             "group_id",
             "actions_resources_id",
         ], unique=True)
+        setup_default_permissions()
 
 
 # TODO: on startup, create DB
@@ -191,6 +244,27 @@ def get_lookups(db):
     return db.execute(
         "select lookup from users where lookup != 'actor' group by lookup;"
     ).fetchall()
+
+
+def make_query(preamble, key_values):
+    """
+    Takes a beginning query and dict, where they keys are column names
+    and the values are the values in need of querying and return a query
+    where "is null" is used in place where None values are encountered.
+
+    E.g., make_query("select * from tbl where", {"action": "greet", "person": None})
+
+    Returns: "select * from tbl where action = :action and person is null"
+    """
+    query_parts = []
+    for key, value in key_values.items():
+        if value is None:
+            query_parts.append(f"{key} is null")
+        else:
+            query_parts.append(f"{key} = :{key}")
+    query_conditionals = " and ".join(query_parts)
+    print("query_conditionals", query_conditionals)
+    return f"{preamble} {query_conditionals}"
 
 
 def bootstrap_and_fetch_users(db, actor):
@@ -263,7 +337,10 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
     relevant_actions = []
     if action:
         data = {"action": action}
-        query = "select id from actions_resources where action = :action"
+        query = (
+            "select id from actions_resources where action = :action "
+            "and resource_primary is null and resource_secondary is null"
+        )
         relevant_actions = db.execute(query, data).fetchall()
         if not len(relevant_actions):
             ar.insert(data, pk="id", replace=True)
@@ -271,13 +348,7 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
     if resource and action:
         if isinstance(resource, str):
             data = {"action": action, "resource_primary": resource}
-            resource_primary_cond = "is null"
-            if resource:
-                resource_primary_cond = "= :resource_primary"
-            query = (
-                "select id from actions_resources "
-                f"where action = :action and resource_primary {resource_primary_cond}"
-            )
+            query = make_query("select id from actions_resources where", data)
             results = db.execute(query, data).fetchall()
             if not len(results):
                 ar.insert(data, pk="id", replace=True)
@@ -291,13 +362,7 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
 
             # do a primary only query first
             data = {"action": action, "resource_primary": resource_primary}
-            resource_primary_cond = "is null"
-            if resource:
-                resource_primary_cond = "= :resource_primary"
-            query = (
-                "select id from actions_resources "
-                f"where action = :action and resource_primary {resource_primary_cond}"
-            )
+            query = make_query("select id from actions_resources where", data)
             results = db.execute(query, data).fetchall()
             if len(results):
                 relevant_actions += results
@@ -306,18 +371,7 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
             data = {"action": action,
                     "resource_primary": resource_primary,
                     "resource_secondary": resource_secondary}
-            resource_primary_cond = "is_null"
-            if resource_primary:
-                resource_primary_cond = "= :resource_primary"
-            resource_secondary_cond = "is null"
-            if resource_secondary:
-                resource_secondary_cond = "= :resource_secondary"
-            query = (
-                "select id from actions_resources "
-                "where action = :action and "
-                f"resource_primary {resource_primary_cond} and "
-                f"resource_secondary {resource_secondary_cond}"
-            )
+            query = make_query("select id from actions_resources where", data)
             results = db.execute(query, data).fetchall()
             if not len(results):
                 # only do the insert here for primary w/ secondary
@@ -355,7 +409,9 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
     ])
     perms = [p for p in db["permissions"].rows_where(cond)]
     for perm in perms:
+        print("!!! perm", perm, "uids", user_ids, "ar_ids", ar_ids)
         return True
+    return False
 
 
 # TODO: on permission requested: lookup permission in DB
@@ -405,7 +461,7 @@ async def perms_crud(scope, receive, datasette, request):
             del formdata["csrftoken"]
 
         pk = "id"
-        if table == "group-membership":
+        if table == "group_membership":
             pk = ("group_id", "user_id")
         db[table].insert(
             formdata, pk=pk, alter=False, replace=True
