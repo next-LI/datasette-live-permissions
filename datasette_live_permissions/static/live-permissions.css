@@ -1,0 +1,26 @@
+#live-permissions-app form {
+  padding: 20px;
+  margin: 20px;
+  border: 1px dotted #666;
+}
+#live-permissions-app label {
+  width: 100%
+}
+#live-permissions-app label span.label-text {
+  display: inline-block;
+  min-width: 60px;
+}
+#live-permissions-app .either-or {
+  border: 1px dotted #aaa;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px;
+}
+#live-permissions-app .or-text {
+  color: #999;
+  text-align: left;
+  margin: 0 0 0 10px;
+}
+.rows-and-columns .delete-item {
+  cursor: pointer;
+}

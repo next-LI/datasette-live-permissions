@@ -38,6 +38,8 @@ def get_db(datasette=None):
 
 
 def setup_default_permissions():
+    is_anon="lookup='actor' and value is null"
+    is_root="lookup='actor.id' and value='root'"
     # A list of datasette-provided defaults. Some of these fields are
     # just informational, like description and default. For each here,
     # we'll add it to the actions-resources DB to bootstrap. If one of
@@ -45,26 +47,36 @@ def setup_default_permissions():
     # the resulting users will be given access in the permissions table.
     default_ars = [{
         "action": "view-instance",
-        "allow_users": "lookup='actor' and value is null",
+        "allow_users": is_anon,
     }, {
         # Actor is allowed to view all databases
         # default: allow
         "action": "view-database",
+        "allow_users": is_root,
+    }, {
+        # Actor is allowed to view all tables
+        # default: allow
+        "action": "view-table",
+        "allow_users": is_root,
     }, {
         "action": "view-database",
         "resource_primary": "live_permissions",
-        "allow_users": "lookup='actor.id' and value='root'",
+        "allow_users": is_root,
+    }, {
+        # allow to edit permissions
+        "action": "live-permissions-edit",
+        "allow_users": is_root,
     }, {
         # Actor is allowed to download all databases",
         # default: allow
         "action": "view-database-download",
-        "allow_users": "lookup='actor.id' and value='root'",
+        "allow_users": is_root,
     }, {
         # Actor is allowed to run arbitrary SQL queries against databases
         # default: allow
         "action": "execute-sql",
         "resource_primary": "live_permissions",
-        "allow_users": "lookup='actor.id' and value='root'",
+        "allow_users": is_root,
     }, {
         # Actor is allowed to view the /-/permissions debug page.
         # default: deny,
@@ -74,27 +86,47 @@ def setup_default_permissions():
         # navigation menu.
         # "default": "deny",
         "action": "debug-menu",
+    }, {
+        "action": "csv-importer",
+        "allow_users": is_root,
+    }, {
+        "action": "live-config",
+        "allow_users": is_root,
+    }, {
+        "action": "surveys-list",
+        "allow_users": is_root,
+    }, {
+        "action": "surveys-create",
+        "allow_users": is_root,
+    }, {
+        "action": "surveys-delete",
+        "allow_users": is_root,
+    }, {
+        "action": "surveys-edit",
+        "allow_users": is_root,
+    }, {
+        "action": "surveys-view",
+        "allow_users": is_anon,
+    }, {
+        "action": "surveys-respond",
+        "allow_users": is_anon,
     }]
 
     db = get_db()
     ar_tbl = db["actions_resources"]
     users = db["users"]
     for default_ar in default_ars:
-        print("default_ar", default_ar)
         ar_data = {
             "action": default_ar["action"],
             "resource_primary": default_ar.get("resource_primary")
         }
         result = ar_tbl.insert(ar_data, pk="id", replace=True)
-        print("result", result)
 
-        if "allow_users" not in default_ar:
+        if "allow_users" not in default_ar and "allow_groups" not in default_ar:
             continue
 
         for u in users.rows_where(default_ar["allow_users"]):
-            print("User", u)
             for ar in ar_tbl.rows_where(make_query("", ar_data), ar_data):
-                print("AR", ar)
                 db["permissions"].insert({
                     "actions_resources_id": ar["id"],
                     "user_id": u["id"],
@@ -263,7 +295,6 @@ def make_query(preamble, key_values):
         else:
             query_parts.append(f"{key} = :{key}")
     query_conditionals = " and ".join(query_parts)
-    print("query_conditionals", query_conditionals)
     return f"{preamble} {query_conditionals}"
 
 
@@ -409,7 +440,6 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
     ])
     perms = [p for p in db["permissions"].rows_where(cond)]
     for perm in perms:
-        print("!!! perm", perm, "uids", user_ids, "ar_ids", ar_ids)
         return True
     return False
 
@@ -424,8 +454,12 @@ def permission_allowed(actor, action, resource):
     async def inner_permission_allowed():
         db = get_db()
         authed_users = bootstrap_and_fetch_users(db, actor)
-        relevant_actions = bootstrap_and_fetch_actions_resources(db, action, resource)
-        return check_permission(actor, action, resource, db, authed_users, relevant_actions)
+        relevant_actions = bootstrap_and_fetch_actions_resources(
+            db, action, resource
+        )
+        return check_permission(
+            actor, action, resource, db, authed_users, relevant_actions
+        )
 
     return inner_permission_allowed
 
@@ -439,8 +473,8 @@ def register_routes():
 
 async def perms_crud(scope, receive, datasette, request):
     table = request.url_vars["table"]
-    obj_id = request.url_vars["id"]
     next = request.args.get("next", f"/live_permissions/{table}")
+    obj_id = request.url_vars["id"]
 
     if not await datasette.permission_allowed(
         request.actor, "live-permissions-edit", default=False
@@ -450,7 +484,6 @@ async def perms_crud(scope, receive, datasette, request):
     assert table and obj_id, "Invalid URL"
     assert request.method in ["POST", "DELETE"], "Bad method"
     assert table in KNOWN_TABLES, "Bad table name provided"
-    assert obj_id == "new" or re.match(r"[0-9]+", obj_id), "Bad id provided"
 
     db = get_db(datasette=datasette)
     # POST is just dual update/create (depending on if id=="new")
@@ -469,5 +502,12 @@ async def perms_crud(scope, receive, datasette, request):
         return Response.redirect(next)
 
     elif request.method == "DELETE":
+        try:
+            obj_id = int(obj_id)
+        except ValueError:
+            obj_id = tuple(int(i) for i in obj_id.split(","))
         db[table].delete(obj_id)
-        return Response.redirect(next)
+        return Response.text('', status=204)
+
+    else:
+        raise NotImplementedError("Bad HTTP method!")

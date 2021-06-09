@@ -1,3 +1,32 @@
+async function deleteItem(e) {
+  const parentEl = $(e.target.parentElement);
+  const cols = parentEl.find("td.col-id");
+  if (!cols || !cols[0]) return;
+
+  const objId = cols[0].innerText.trim();
+  const parts = document.location.pathname.split("/").filter(x=>x);
+  const table = parts[parts.length-1];
+  const url_path = `/-/live-permissions/${table}/${objId}`;
+
+  const csrf_els = $("input[name='csrftoken']");
+  if (!csrf_els || !csrf_els[0]) return;
+  const csrftoken = csrf_els[0].value;
+
+  const response = await fetch(url_path, {
+    method: 'DELETE',
+    headers: {
+      "x-csrftoken": csrftoken,
+    },
+  });
+  if (response.status === 204) document.location.reload();
+}
+
+function addTrashCans() {
+  $(".rows-and-columns thead tr").append("<th>Delete</th>");
+  $(".rows-and-columns tbody tr").append("<td class='delete-item'>🗑️</td>");
+  $('.delete-item').on("click", deleteItem);
+}
+
 function s2_data(type, params) {
   switch(type) {
     case 'action-resource':
@@ -85,6 +114,8 @@ function setup() {
       processResults: s2_process.bind(this, 'group'),
     }
   });
+
+  addTrashCans();
 }
 
 $(document).ready(setup);

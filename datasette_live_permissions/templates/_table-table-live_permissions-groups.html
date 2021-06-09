@@ -38,25 +38,14 @@
       href="/-/static-plugins/datasette-live-permissions/live-permissions.css" />
 
 <div id="live-permissions-app">
-  <form action="/-/live-permissions/permissions/new" method="post">
-    <p class="new-permission">
-    Add a new permission.
+  <form action="/-/live-permissions/groups/new" method="post">
+    <p class="new-group">
+    Add a new group.
     </p>
-    <label for="actions-resources-id">
-      <span class="label-text">Action</span>
-      <select id="actions-resources-id" name="actions_resources_id" style="width: 50%"></select>
+    <label for="name">
+      <span class="label-text">Name</span>
+      <input type="text" name="name" placeholder="Group name" />
     </label>
-    <div class="either-or">
-      <label for="user-id">
-        <span class="label-text">User</span>
-        <select id="user-id" name="user_id" style="width: 50%"></select>
-      </label>
-      <p class="or-text">or...</p>
-      <label for="group-id">
-        <span class="label-text">Group</span>
-        <select id="group-id" name="group_id" style="width: 50%"></select>
-      </label>
-    </div>
     <input type="hidden" name="csrftoken" value="{{ csrftoken() }}" />
     <input type="submit" value="Save" />
   </form>

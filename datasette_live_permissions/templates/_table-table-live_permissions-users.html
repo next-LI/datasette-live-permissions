@@ -38,25 +38,26 @@
       href="/-/static-plugins/datasette-live-permissions/live-permissions.css" />
 
 <div id="live-permissions-app">
-  <form action="/-/live-permissions/permissions/new" method="post">
-    <p class="new-permission">
-    Add a new permission.
+  <form action="/-/live-permissions/users/new" method="post">
+    <p class="new-user">
+    Add a new user. Users are looked up by a looking for a specific value
+    by following a lookup path. For example, the root user, which looks
+    like this <code>actor={ "id": "root" }</code> can be matched by using a lookup
+    of "actor.id" and a value of "root". Other plugins, like GitHub Authentication
+    add additional values like "actor.gh_email".
     </p>
-    <label for="actions-resources-id">
-      <span class="label-text">Action</span>
-      <select id="actions-resources-id" name="actions_resources_id" style="width: 50%"></select>
+    <label for="lookup">
+      <span class="label-text">Lookup</span>
+      <input type="text" name="lookup" placeholder="Actor lookup, e.g., actor.id" />
     </label>
-    <div class="either-or">
-      <label for="user-id">
-        <span class="label-text">User</span>
-        <select id="user-id" name="user_id" style="width: 50%"></select>
-      </label>
-      <p class="or-text">or...</p>
-      <label for="group-id">
-        <span class="label-text">Group</span>
-        <select id="group-id" name="group_id" style="width: 50%"></select>
-      </label>
-    </div>
+    <label for="value">
+      <span class="label-text">Value</span>
+      <input type="text" name="value" placeholder="Lookup value, e.g. email" />
+    </label>
+    <label for="description">
+      <span class="label-text">Description</span>
+      <input type="text" name="description" placeholder="Describe this user lookup/value" />
+    </label>
     <input type="hidden" name="csrftoken" value="{{ csrftoken() }}" />
     <input type="submit" value="Save" />
   </form>
