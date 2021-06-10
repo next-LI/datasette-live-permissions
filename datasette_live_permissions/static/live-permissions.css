@@ -4,7 +4,7 @@
   border: 1px dotted #666;
 }
 #live-permissions-app label {
-  width: 100%
+  width: 100%;
   margin-bottom: 10px;
 }
 #live-permissions-app label span.label-text {
