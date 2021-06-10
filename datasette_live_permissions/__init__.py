@@ -133,6 +133,15 @@ def setup_default_permissions():
                 }, replace=True)
 
 
+def have_live_config_plugin(datasette):
+    if not datasette:
+        return
+    for plugin in datasette._plugins():
+        if plugin.get("name") == "datasette-live-config":
+            return True
+    return False
+
+
 def create_tables(datasette=None):
     database = get_db(datasette=datasette)
     table_names = database.table_names()
@@ -182,7 +191,10 @@ def create_tables(datasette=None):
         database["group_membership"].create({
             "group_id": int,
             "user_id": int,
-        }, pk=("group_id", "user_id"))
+        }, pk=("group_id", "user_id"), foreign_keys=(
+            ("user_id", "users", "id"),
+            ("group_id", "groups", "id"),
+        ))
         database["group_membership"].insert({
             "user_id": 1,
             "group_id": 1,
@@ -226,6 +238,28 @@ def create_tables(datasette=None):
             "actions_resources_id",
         ], unique=True)
         setup_default_permissions()
+
+    if have_live_config_plugin(datasette) and "__metadata" not in table_names:
+        database["__metadata"].insert({
+            "key": "tables",
+            "value": json.dumps({
+                "groups": {
+                    "hidden": False,
+                    "label_column": "name"
+                },
+                "users": {
+                    "hidden": False,
+                    "label_column": "value"
+                },
+                "actions_resources": {
+                    "hidden": False,
+                    "label_column": "action"
+                },
+                "__metadata": {
+                    "hidden": True
+                }
+            })
+        }, pk="key", alter=True, replace=False)
 
 
 # TODO: on startup, create DB
@@ -497,7 +531,7 @@ async def perms_crud(scope, receive, datasette, request):
         if table == "group_membership":
             pk = ("group_id", "user_id")
         db[table].insert(
-            formdata, pk=pk, alter=False, replace=True
+            formdata, pk=pk, alter=False, replace=False
         )
         return Response.redirect(next)
 
