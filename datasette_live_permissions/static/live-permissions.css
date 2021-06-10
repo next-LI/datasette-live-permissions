@@ -5,6 +5,7 @@
 }
 #live-permissions-app label {
   width: 100%
+  margin-bottom: 10px;
 }
 #live-permissions-app label span.label-text {
   display: inline-block;
