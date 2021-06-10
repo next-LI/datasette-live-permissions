@@ -22,7 +22,7 @@ async function deleteItem(e) {
 }
 
 function addTrashCans() {
-  $(".rows-and-columns thead tr").append("<th>Delete</th>");
+  $(".rows-and-columns thead tr").append("<th>delete</th>");
   $(".rows-and-columns tbody tr").append("<td class='delete-item'>🗑️</td>");
   $('.delete-item').on("click", deleteItem);
 }
