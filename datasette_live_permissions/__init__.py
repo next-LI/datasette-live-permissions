@@ -133,6 +133,22 @@ def setup_default_permissions():
                 }, replace=True)
 
 
+def add_user(database, user_dict):
+    """
+    Add a user by a provided user_dict lookup and also add them
+    to the auto-added users group.
+    """
+    database["users"].insert(user_dict, pk="id", replace=True)
+    uid = None
+    for u in database["users"].rows_where(make_query("", user_dict), limit=1):
+        uid = u["id"]
+    if uid is not None:
+        database["group_membership"].insert({
+            "user_id": uid,
+            "group_id": 1,
+        }, pk=("group_id", "user_id"), replace=True)
+
+
 def have_live_config_plugin(datasette):
     if not datasette:
         return
@@ -378,18 +394,22 @@ def bootstrap_and_fetch_users(db, actor):
         query = f"select id from [users] where {where_conditions}"
         results = db.execute(query, lookup_args).fetchall()
         if not len(results):
-            # github auth check, add it if we don't have it added already
-            if "gh_email" in actor and "actor.gh_email" not in lookup_values:
-                lookup_values["actor.gh_email"] = actor.get("gh_email")
-            for lookup, value in lookup_values.items():
-                users.insert({
-                    "lookup": lookup,
-                    "value": value,
-                }, pk="id", replace=True)
-                # just do the first one for now, people can
-                # figure out other ways to do lookups from
-                # the examples
-                break
+            # github auth plugin support
+            if actor.get("gh_email"):
+                add_user(db, {
+                    "lookup": "actor.gh_email",
+                    "value": actor.get("gh_email"),
+                })
+            else:
+                for lookup, value in lookup_values.items():
+                    add_user(db, {
+                        "lookup": lookup,
+                        "value": value,
+                    })
+                    # just do the first one for now, people can
+                    # figure out other ways to do lookups from
+                    # the examples
+                    break
         else:
             relevant_users += results
 
