@@ -37,6 +37,26 @@ def get_db(datasette=None):
     return db
 
 
+def make_query(preamble, key_values):
+    """
+    Takes a beginning query and dict, where they keys are column names
+    and the values are the values in need of querying and return a query
+    where "is null" is used in place where None values are encountered.
+
+    E.g., make_query("select * from tbl where", {"action": "greet", "person": None})
+
+    Returns: "select * from tbl where action = :action and person is null"
+    """
+    query_parts = []
+    for key, value in key_values.items():
+        if value is None:
+            query_parts.append(f"{key} is null")
+        else:
+            query_parts.append(f"{key} = :{key}")
+    query_conditionals = " and ".join(query_parts)
+    return f"{preamble} {query_conditionals}"
+
+
 def setup_default_permissions():
     is_anon="lookup='actor' and value is null"
     is_root="lookup='actor.id' and value='root'"
@@ -138,9 +158,12 @@ def add_user(database, user_dict):
     Add a user by a provided user_dict lookup and also add them
     to the auto-added users group.
     """
-    database["users"].insert(user_dict, pk="id", replace=True)
+    users_tbl = database["users"]
+    users_tbl.insert(user_dict, pk="id", replace=True)
+    query = make_query("", user_dict)
+    print("query", query, "args", user_dict)
     uid = None
-    for u in database["users"].rows_where(make_query("", user_dict), limit=1):
+    for u in users_tbl.rows_where(query, user_dict, limit=1):
         uid = u["id"]
     if uid is not None:
         database["group_membership"].insert({
@@ -326,26 +349,6 @@ def get_lookups(db):
     return db.execute(
         "select lookup from users where lookup != 'actor' group by lookup;"
     ).fetchall()
-
-
-def make_query(preamble, key_values):
-    """
-    Takes a beginning query and dict, where they keys are column names
-    and the values are the values in need of querying and return a query
-    where "is null" is used in place where None values are encountered.
-
-    E.g., make_query("select * from tbl where", {"action": "greet", "person": None})
-
-    Returns: "select * from tbl where action = :action and person is null"
-    """
-    query_parts = []
-    for key, value in key_values.items():
-        if value is None:
-            query_parts.append(f"{key} is null")
-        else:
-            query_parts.append(f"{key} = :{key}")
-    query_conditionals = " and ".join(query_parts)
-    return f"{preamble} {query_conditionals}"
 
 
 def bootstrap_and_fetch_users(db, actor):
