@@ -482,11 +482,14 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
 # resources must have actions
 # permissions can have users and groups and action and resource and allow/deny
 def check_permission(actor, action, resource, db, authed_users, relevant_actions):
-    # TODO: find groups
-    group_ids = ""
     user_ids = ",".join([
         str(a[0]) for a in authed_users or []
     ])
+    group_ids = ",".join(set([
+        str(g["group_id"]) for g in db["group_membership"].rows_where(
+            f"user_id in ({user_ids})"
+        )
+    ]))
     ar_ids = ",".join([
         str(a[0]) for a in relevant_actions or []
     ])
