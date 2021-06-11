@@ -1,6 +1,6 @@
 async function deleteItem(e) {
   const parentEl = $(e.target.parentElement);
-  const cols = parentEl.find("td.col-id");
+  const cols = parentEl.find("td.type-pk");
   if (!cols || !cols[0]) return;
 
   const objId = cols[0].innerText.trim();

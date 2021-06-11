@@ -161,7 +161,6 @@ def add_user(database, user_dict):
     users_tbl = database["users"]
     users_tbl.insert(user_dict, pk="id", replace=True)
     query = make_query("", user_dict)
-    print("query", query, "args", user_dict)
     uid = None
     for u in users_tbl.rows_where(query, user_dict, limit=1):
         uid = u["id"]
