@@ -38,25 +38,22 @@
       href="/-/static-plugins/datasette-live-permissions/live-permissions.css" />
 
 <div id="live-permissions-app">
-  <form action="/-/live-permissions/permissions/new" method="post">
+  <form action="/-/live-permissions/actions_resources/new" method="post">
     <p class="new-permission">
     Add a new permission.
     </p>
-    <label for="actions-resources-id">
+    <label for="action">
       <span class="label-text">Action</span>
-      <select id="actions-resources-id" name="actions_resources_id" style="width: 50%"></select>
+      <input id="action" name="action" placeholder="e.g., view-table" />
     </label>
-    <div class="either-or">
-      <label for="user-id">
-        <span class="label-text">User</span>
-        <select id="user-id" name="user_id" style="width: 50%"></select>
-      </label>
-      <p class="or-text">or...</p>
-      <label for="group-id">
-        <span class="label-text">Group</span>
-        <select id="group-id" name="group_id" style="width: 50%"></select>
-      </label>
-    </div>
+    <label for="resource_primary">
+      <span class="label-text">Resource Primary</span>
+      <input id="resource_primary" name="resource_primary" placeholder="e.g., database_name" />
+    </label>
+    <label for="resource_secondary">
+      <span class="label-text">Resource Secondary</span>
+      <input id="resource_secondary" name="resource_secondary" placeholder="e.g., table_name" />
+    </label>
     <input type="hidden" name="csrftoken" value="{{ csrftoken() }}" />
     <input type="submit" value="Save" />
   </form>
