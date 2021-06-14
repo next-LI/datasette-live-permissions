@@ -448,16 +448,22 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
             resource_primary, resource_secondary = resource
 
             # do a primary only query first
-            data = {"action": action, "resource_primary": resource_primary}
+            data = {
+                "action": action,
+                "resource_primary": resource_primary,
+                "resource_secondary": None
+            }
             query = make_query("select id from actions_resources where", data)
             results = db.execute(query, data).fetchall()
             if len(results):
                 relevant_actions += results
 
             # then do a primary w/ secondary check
-            data = {"action": action,
-                    "resource_primary": resource_primary,
-                    "resource_secondary": resource_secondary}
+            data = {
+                "action": action,
+                "resource_primary": resource_primary,
+                "resource_secondary": resource_secondary
+            }
             query = make_query("select id from actions_resources where", data)
             results = db.execute(query, data).fetchall()
             if not len(results):
@@ -482,24 +488,33 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
 # resources must have actions
 # permissions can have users and groups and action and resource and allow/deny
 def check_permission(actor, action, resource, db, authed_users, relevant_actions):
+    print("Datasette perm request\n\tActor:", actor,
+          "\n\tAction:", action, "\n\tResource:", resource)
     user_ids = ",".join([
         str(a[0]) for a in authed_users or []
     ])
+    print("User IDs", user_ids)
     group_ids = ",".join(set([
         str(g["group_id"]) for g in db["group_membership"].rows_where(
             f"user_id in ({user_ids})"
         )
     ]))
+    print("Group IDs", group_ids)
     ar_ids = ",".join([
         str(a[0]) for a in relevant_actions or []
     ])
+    print("AR IDs", ar_ids)
     cond = " and ".join([
         f"actions_resources_id in ({ar_ids})",
         f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
     ])
+    print("Query:", cond)
     perms = [p for p in db["permissions"].rows_where(cond)]
+    print("Results", perms)
     for perm in perms:
+        print("Permission granted!\n")
         return True
+    print("Denied.\n")
     return False
 
 
