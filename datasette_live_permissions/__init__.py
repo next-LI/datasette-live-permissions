@@ -63,6 +63,8 @@ def setup_default_permissions(datasette):
     users = db["users"]
     groups = db["groups"]
 
+    # NOTE: If these aren't already created then they won't
+    # be assigned any permissions
     anyone="lookup='actor' and value is null"
     grp_is_admin="name='Admins'"
     grp_is_survey_admin="name='Survey Admins'"
@@ -136,6 +138,7 @@ def setup_default_permissions(datasette):
         "action": "live-config",
         "allow_groups": " or ".join([grp_is_admin, grp_is_config_admin]),
     }, {
+        # Can see the list of surveys
         "action": "surveys-list",
         "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
@@ -148,10 +151,12 @@ def setup_default_permissions(datasette):
         "action": "surveys-edit",
         "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
+        # Can view the survey response form
         "action": "surveys-view",
         "allow_users": anyone,
         "allow_groups": grp_is_survey_admin,
     }, {
+        # Can respond to survey response form
         "action": "surveys-respond",
         "allow_users": anyone,
         "allow_groups": grp_is_survey_admin,
@@ -561,36 +566,26 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
 # resources must have actions
 # permissions can have users and groups and action and resource and allow/deny
 def check_permission(actor, action, resource, db, authed_users, relevant_actions):
-    print("Datasette perm request\n\tActor:", actor,
-          "\n\tAction:", action, "\n\tResource:", resource)
     user_ids = ",".join([
         str(a[0]) for a in authed_users or []
     ])
-    print("User IDs", user_ids)
     group_ids = ",".join(set([
         str(g["group_id"]) for g in db["group_membership"].rows_where(
             f"user_id in ({user_ids})"
         )
     ]))
-    print("Group IDs", group_ids)
     ar_ids = ",".join([
         str(a[0]) for a in relevant_actions or []
     ])
-    print("AR IDs", ar_ids)
     cond = " and ".join([
         f"actions_resources_id in ({ar_ids})",
         f"(user_id in ({user_ids}) or group_id in ({group_ids}))",
     ])
-    print("Query:", cond)
     perms = [p for p in db["permissions"].rows_where(cond)]
-    print("Results", perms)
     for perm in perms:
-        print("Permission granted!\n")
         return True
     if actor and actor.get("id") == "root":
-        print("Allowed root by exception.")
         return True
-    print("Denied.\n")
     return False
 
 
