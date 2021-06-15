@@ -57,9 +57,18 @@ def make_query(preamble, key_values):
     return f"{preamble} {query_conditionals}"
 
 
-def setup_default_permissions():
-    is_anon="lookup='actor' and value is null"
-    is_root="lookup='actor.id' and value='root'"
+def setup_default_permissions(datasette):
+    db = get_db()
+    ar_tbl = db["actions_resources"]
+    users = db["users"]
+    groups = db["groups"]
+
+    anyone="lookup='actor' and value is null"
+    grp_is_admin="name='Admins'"
+    grp_is_survey_admin="name='Survey Admins'"
+    grp_is_config_admin="name='Config Admins'"
+    grp_is_perms_admin="name='Permission Admins'"
+
     # A list of datasette-provided defaults. Some of these fields are
     # just informational, like description and default. For each here,
     # we'll add it to the actions-resources DB to bootstrap. If one of
@@ -67,74 +76,108 @@ def setup_default_permissions():
     # the resulting users will be given access in the permissions table.
     default_ars = [{
         "action": "view-instance",
-        "allow_users": is_anon,
+        "allow_users": anyone,
     }, {
         # Actor is allowed to view all databases
         # default: allow
         "action": "view-database",
-        "allow_users": is_root,
+        "allow_groups": grp_is_admin,
     }, {
         # Actor is allowed to view all tables
         # default: allow
         "action": "view-table",
-        "allow_users": is_root,
-    }, {
-        "action": "view-database",
-        "resource_primary": "live_permissions",
-        "allow_users": is_root,
-    }, {
-        # allow to edit permissions
-        "action": "live-permissions-edit",
-        "allow_users": is_root,
-    }, {
-        # Actor is allowed to download all databases",
-        # default: allow
-        "action": "view-database-download",
-        "allow_users": is_root,
+        "allow_groups": grp_is_admin,
     }, {
         # Actor is allowed to run arbitrary SQL queries against databases
         # default: allow
         "action": "execute-sql",
-        "resource_primary": "live_permissions",
-        "allow_users": is_root,
+        "allow_groups": grp_is_admin,
     }, {
-        # Actor is allowed to view the /-/permissions debug page.
-        # default: deny,
-        "action": "permissions-debug",
+        # Actor is allowed to download all databases",
+        # default: allow
+        "action": "view-database-download",
+        "allow_groups": grp_is_admin,
     }, {
         # Controls if the various debug pages are displayed in the
         # navigation menu.
         # "default": "deny",
         "action": "debug-menu",
+        "allow_groups": grp_is_admin,
     }, {
+        # Allow people to import new CSVs!
         "action": "csv-importer",
-        "allow_users": is_root,
+        "allow_groups": grp_is_admin,
     }, {
+        # Allow to view permissions database
+        "action": "view-database",
+        "resource_primary": "live_permissions",
+        "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
+    }, {
+        # Allow to view permissions database tables
+        "action": "view-table",
+        "resource_primary": "live_permissions",
+        "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
+    }, {
+        # Allow to execute SQL against permissions database
+        "action": "execute-sql",
+        "resource_primary": "live_permissions",
+        "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
+    }, {
+        # allow to edit permissions
+        "action": "live-permissions-edit",
+        "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
+    }, {
+        # Actor is allowed to view the /-/permissions debug page.
+        # default: deny,
+        "action": "permissions-debug",
+        "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
+    },{
+        # Ability to view and edit global configuration
         "action": "live-config",
-        "allow_users": is_root,
+        "allow_groups": " or ".join([grp_is_admin, grp_is_config_admin]),
     }, {
         "action": "surveys-list",
-        "allow_users": is_root,
+        "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
         "action": "surveys-create",
-        "allow_users": is_root,
+        "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
         "action": "surveys-delete",
-        "allow_users": is_root,
+        "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
         "action": "surveys-edit",
-        "allow_users": is_root,
+        "allow_groups": " or ".join([grp_is_admin, grp_is_survey_admin]),
     }, {
         "action": "surveys-view",
-        "allow_users": is_anon,
+        "allow_users": anyone,
+        "allow_groups": grp_is_survey_admin,
     }, {
         "action": "surveys-respond",
-        "allow_users": is_anon,
+        "allow_users": anyone,
+        "allow_groups": grp_is_survey_admin,
     }]
+    # create convenience view-table/db functions for available dbs
+    if datasette:
+        for db_name in datasette.databases:
+            grp_db = f"DB Access: {db_name}"
+            groups.insert({
+                "name": grp_db,
+            }, pk="id", replace=True)
 
-    db = get_db()
-    ar_tbl = db["actions_resources"]
-    users = db["users"]
+            allow_grps = " or ".join([
+                f"name='{grp_db}'", grp_is_admin
+            ])
+            default_ars.append({
+                "action": "view-database",
+                "resource_primary": db_name,
+                "allow_groups": allow_grps,
+            })
+            default_ars.append({
+                "action": "view-table",
+                "resource_primary": db_name,
+                "allow_groups": allow_grps,
+            })
+
     for default_ar in default_ars:
         ar_data = {
             "action": default_ar["action"],
@@ -145,12 +188,21 @@ def setup_default_permissions():
         if "allow_users" not in default_ar and "allow_groups" not in default_ar:
             continue
 
-        for u in users.rows_where(default_ar["allow_users"]):
-            for ar in ar_tbl.rows_where(make_query("", ar_data), ar_data):
-                db["permissions"].insert({
-                    "actions_resources_id": ar["id"],
-                    "user_id": u["id"],
-                }, replace=True)
+        if default_ar.get("allow_users"):
+            for u in users.rows_where(default_ar.get("allow_users")):
+                for ar in ar_tbl.rows_where(make_query("", ar_data), ar_data):
+                    db["permissions"].insert({
+                        "actions_resources_id": ar["id"],
+                        "user_id": u["id"],
+                    }, replace=True)
+
+        if default_ar.get("allow_groups"):
+            for g in groups.rows_where(default_ar.get("allow_groups")):
+                for ar in ar_tbl.rows_where(make_query("", ar_data), ar_data):
+                    db["permissions"].insert({
+                        "actions_resources_id": ar["id"],
+                        "group_id": g["id"],
+                    }, replace=True)
 
 
 def add_user(database, user_dict):
@@ -172,6 +224,10 @@ def add_user(database, user_dict):
 
 
 def have_live_config_plugin(datasette):
+    """
+    Checks to see if we have the datasette-live-config plugin
+    installed. If so, we can integrate with it.
+    """
     if not datasette:
         return
     for plugin in datasette._plugins():
@@ -181,6 +237,9 @@ def have_live_config_plugin(datasette):
 
 
 def create_tables(datasette=None):
+    """
+    Bootstrap all the tables and default users, groups and permissions.
+    """
     database = get_db(datasette=datasette)
     table_names = database.table_names()
 
@@ -207,7 +266,7 @@ def create_tables(datasette=None):
         }, pk="id", replace=True)
         database["users"].insert({
             "id": 2,
-            "description": "Unauthenticated users",
+            "description": "Anybody (authed or not)",
             "lookup": "actor",
             "value": None,
         }, pk="id", replace=True)
@@ -217,13 +276,27 @@ def create_tables(datasette=None):
             "id": int,
             "name": str,
         }, pk="id")
+        database["groups"].create_index([
+            "name",
+        ], unique=True)
         database["groups"].insert({
             "id": 1,
             "name": "Auto-added users",
         }, pk="id", replace=True)
-        database["groups"].create_index([
-            "name",
-        ], unique=True)
+        database["groups"].insert({
+            "name": "Admins",
+        }, pk="id", replace=True)
+        database["groups"].insert({
+            "name": 'Permission Admins'
+        }, pk="id", replace=True)
+        # TODO: check for surveys plugin
+        database["groups"].insert({
+            "name": 'Survey Admins',
+        }, pk="id", replace=True)
+        # TODO: check for config plugin
+        database["groups"].insert({
+            "name": 'Config Admins'
+        }, pk="id", replace=True)
 
     if "group_membership" not in table_names:
         database["group_membership"].create({
@@ -275,7 +348,7 @@ def create_tables(datasette=None):
             "group_id",
             "actions_resources_id",
         ], unique=True)
-        setup_default_permissions()
+        setup_default_permissions(datasette)
 
     if have_live_config_plugin(datasette) and "__metadata" not in table_names:
         database["__metadata"].insert({
@@ -513,6 +586,9 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
     print("Results", perms)
     for perm in perms:
         print("Permission granted!\n")
+        return True
+    if actor and actor.get("id") == "root":
+        print("Allowed root by exception.")
         return True
     print("Denied.\n")
     return False
