@@ -182,6 +182,12 @@ def setup_default_permissions(datasette):
                 "resource_primary": db_name,
                 "allow_groups": allow_grps,
             })
+            default_ars.append({
+                "action": "live-config",
+                "resource_primary": db_name,
+                "allow_groups": allow_grps,
+            })
+
 
     for default_ar in default_ars:
         ar_data = {
@@ -561,10 +567,6 @@ def bootstrap_and_fetch_actions_resources(db, action, resource):
     return relevant_actions or None
 
 
-# TODO: allow people to create groups
-# groups can have users
-# resources must have actions
-# permissions can have users and groups and action and resource and allow/deny
 def check_permission(actor, action, resource, db, authed_users, relevant_actions):
     user_ids = ",".join([
         str(a[0]) for a in authed_users or []
