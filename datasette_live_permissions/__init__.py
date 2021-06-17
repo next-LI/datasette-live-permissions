@@ -188,7 +188,6 @@ def setup_default_permissions(datasette):
                 "allow_groups": allow_grps,
             })
 
-
     for default_ar in default_ars:
         ar_data = {
             "action": default_ar["action"],
@@ -609,6 +608,20 @@ def permission_allowed(actor, action, resource):
         )
 
     return inner_permission_allowed
+
+
+@hookimpl
+def menu_links(datasette, actor):
+    async def inner():
+        if not await datasette.permission_allowed(
+            actor, "live-permissions-edit", default=False
+        ):
+            return
+        return [{
+            "href": datasette.urls.path(f"/{DB_NAME}"),
+            "label": "Permissions"
+        }]
+    return inner
 
 
 @hookimpl
