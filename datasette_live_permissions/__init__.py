@@ -19,13 +19,17 @@ KNOWN_TABLES = [
 ]
 
 
+def get_db_path():
+    return os.path.join(DEFAULT_DBPATH, f"{DB_NAME}.db")
+
+
 def get_db(datasette=None):
     """
     Returns a sqlite_utils.Database, not datasette.Database, but a datasette
     Database can be got through datasette.databases[DB_NAME] after this runs.
     """
-    database_path = os.path.join(DEFAULT_DBPATH, f"{DB_NAME}.db")
     # this will create the DB if not exists
+    database_path = get_db_path()
     conn = sqlite3.connect(database_path)
     db = sqlite_utils.Database(conn)
     # just make it show up in the DBs list
@@ -625,8 +629,23 @@ def menu_links(datasette, actor):
 
 
 @hookimpl
+def database_actions(datasette, actor, database):
+    async def inner_database_actions():
+        allowed = await datasette.permission_allowed(
+            actor, "live-permissions-edit", database, default=False
+        )
+        if allowed:
+            return [{
+                "href": datasette.urls.path(f"/-/live-permissions/db/manage/{database}"),
+                "label": "Manage permissions",
+            }]
+    return inner_database_actions
+
+
+@hookimpl
 def register_routes():
     return [
+        (r"^/-/live-permissions/db/manage/(?P<database>.*)/?$", manage_db_group),
         (r"^/-/live-permissions/(?P<table>.*)/(?P<id>.*)/?$", perms_crud),
     ]
 
@@ -671,3 +690,63 @@ async def perms_crud(scope, receive, datasette, request):
 
     else:
         raise NotImplementedError("Bad HTTP method!")
+
+
+async def manage_db_group(scope, receive, datasette, request):
+    db_name = request.url_vars["database"]
+    if not await datasette.permission_allowed(
+        request.actor, "live-permissions-edit", db_name, default=False
+    ):
+        raise Forbidden("Permission denied")
+
+    db = get_db(datasette=datasette)
+    ar_data = {
+        "action": "live-permissions-edit",
+        "resource_primary": db_name,
+    }
+
+    ar_id = None
+    ar_query = make_query("", ar_data)
+    results = db["actions_resources"].rows_where(ar_query, ar_data)
+    for ar in results:
+        ar_id = ar["id"]
+        break
+
+    assert ar_id is not None, "Couldn't find action-resource ID"
+
+    if request.method in ["POST", "DELETE"]:
+        formdata = await request.post_vars()
+        user_id = formdata["user_id"]
+
+        db["actions_resources"].insert(ar_data, replace=True)
+        if request.method == "POST":
+            db["permissions"].insert({
+                "actions_resources_id": ar_id,
+                "user_id": user_id,
+            }, replace=True)
+        elif request.method == "DELETE":
+            results = db["permissions"].rows_where(
+                "actions_resources_id=? and user_id=?",
+                [ar_id, user_id]
+            )
+            for row in results:
+                db["permissions"].delete(row["id"])
+            return Response.text('', status=204)
+        else:
+            raise NotImplementedError(f"Bad method: {request.method}")
+
+    perms_query = """
+        select distinct user_id as id, lookup, value, description
+        from permissions join users
+        on permissions.user_id = users.id
+        where actions_resources_id=?
+    """
+    users = db.execute(perms_query, (ar_id,))
+    return Response.html(
+        await datasette.render_template(
+            "database_management.html", {
+                "database": db_name,
+                "users": users,
+            }, request=request
+        )
+    )

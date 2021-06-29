@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Database access management: {database}{% endblock %}
+{% block extra_head %}
+<style>
+.editor-widget {
+  max-width: 100%;
+  min-width: 300px;
+}
+.editor-widget .checkbox {
+  /* fix for description showing before the checkbox and title */
+  display: flex;
+  flex-flow: column-reverse wrap;
+}
+.editor-widget label {
+  /* there's no reason for the label width for checkboxes to be locked at 15% */
+  width: unset;
+}
+
+.control-label {
+  margin-right: 10px;
+}
+
+.editor-widget .checkbox label span {
+  font-weight: bold;
+}
+.editor-widget button[type="submit"].btn-info {
+  display: none;
+}
+
+.delete-item-db {
+  cursor: pointer;
+}
+
+/* .row.array-item-list { */
+.form-group.field.field-object {
+  border: 1px dashed gray;
+  margin: 20px;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+.success {
+  background-color: rgba(0,255,0,0.1);
+  padding: 20px;
+  text-align: center;
+}
+.failure {
+  background-color: rgba(255,0,0,0.1);
+  padding: 20px;
+  text-align: center;
+}
+</style>
+<link rel="stylesheet" type="text/css"
+      href="/-/static-plugins/datasette-live-permissions/live-permissions.css" />
+
+{% endblock %}
+{% block nav %}
+<p class="crumbs">
+  <a href="{{ urls.instance() }}">home</a>
+</p>
+{{super()}}
+{% endblock %}
+
+{% block content %}
+<div id="live-permissions-app" class="user-management">
+  <h1>Permissions: {{database}}</h1>
+  {% if message %}
+    <div class="message {{status}}">{{message}}</div>
+  {% endif %}
+
+  <div class="existing">
+    <table>
+      <thead>
+        <tr>
+          <td>User ID</td>
+          <td>Lookup</td>
+          <td>Value</td>
+          <td>Description</td>
+          <td>Delete</td>
+        </tr>
+      </thead>
+      <tbody>
+      {% for user in users %}
+        <tr>
+          <td>{{ user[0] }}</td>
+          <td>{{ user[1] }}</td>
+          <td>{{ user[2] }}</td>
+          <td>{{ user[3] }}</td>
+          <td class='delete-item-db'>🗑️</td>
+        </tr>
+      {% else %}
+      <tr>
+        <td>
+          No users added!
+        </td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form action="/-/live-permissions/db/manage/{{database}}" method="post">
+    <h2>Grant access to a user</h2>
+    <label for="user-id">
+      <span class="label-text">User</span>
+      <select id="user-id" name="user_id" style="width: 50%"></select>
+    </label>
+
+    <input type="hidden" name="csrftoken" value="{{ csrftoken() }}" />
+    <input type="submit" value="Save" />
+  </form>
+</div>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="/-/static-plugins/datasette-live-permissions/editor.js"></script>
+{% endblock %}
