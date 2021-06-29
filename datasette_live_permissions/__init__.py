@@ -700,48 +700,37 @@ async def manage_db_group(scope, receive, datasette, request):
         raise Forbidden("Permission denied")
 
     db = get_db(datasette=datasette)
-    ar_data = {
-        "action": "live-permissions-edit",
-        "resource_primary": db_name,
-    }
 
-    ar_id = None
-    ar_query = make_query("", ar_data)
-    results = db["actions_resources"].rows_where(ar_query, ar_data)
-    for ar in results:
-        ar_id = ar["id"]
+    group_id = None
+    results = db["groups"].rows_where("name=?", [f"DB Access: {db_name}"])
+    for row in results:
+        group_id = row["id"]
         break
 
-    assert ar_id is not None, "Couldn't find action-resource ID"
+    assert group_id, "Couldn't find DB access group!"
 
     if request.method in ["POST", "DELETE"]:
         formdata = await request.post_vars()
         user_id = formdata["user_id"]
 
-        db["actions_resources"].insert(ar_data, replace=True)
         if request.method == "POST":
-            db["permissions"].insert({
-                "actions_resources_id": ar_id,
+            db["group_membership"].insert({
+                "group_id": group_id,
                 "user_id": user_id,
             }, replace=True)
         elif request.method == "DELETE":
-            results = db["permissions"].rows_where(
-                "actions_resources_id=? and user_id=?",
-                [ar_id, user_id]
-            )
-            for row in results:
-                db["permissions"].delete(row["id"])
+            db["group_membership"].delete((group_id, user_id))
             return Response.text('', status=204)
         else:
             raise NotImplementedError(f"Bad method: {request.method}")
 
     perms_query = """
         select distinct user_id as id, lookup, value, description
-        from permissions join users
-        on permissions.user_id = users.id
-        where actions_resources_id=?
+        from group_membership join users
+        on group_membership.user_id = users.id
+        where group_membership.group_id=?
     """
-    users = db.execute(perms_query, (ar_id,))
+    users = db.execute(perms_query, (group_id,))
     return Response.html(
         await datasette.render_template(
             "database_management.html", {
