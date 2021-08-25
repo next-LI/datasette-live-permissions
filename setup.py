@@ -29,7 +29,10 @@ setup(
     version=VERSION,
     packages=["datasette_live_permissions"],
     entry_points={"datasette": ["live_permissions = datasette_live_permissions"]},
-    # install_requires=["datasette"],
+    install_requires=[
+        "datasette",
+        "sqlite-utils~=3.11",
+    ],
     extras_require={"test": ["pytest", "pytest-asyncio"]},
     tests_require=["datasette-live-permissions[test]"],
     package_data={
