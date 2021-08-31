@@ -652,7 +652,8 @@ def register_routes():
 
 async def perms_crud(scope, receive, datasette, request):
     table = request.url_vars["table"]
-    next = request.args.get("next", f"/live_permissions/{table}")
+    default_next = datasette.urls.path(f"/live_permissions/{table}")
+    next = request.args.get("next", default_next)
     obj_id = request.url_vars["id"]
 
     if not await datasette.permission_allowed(

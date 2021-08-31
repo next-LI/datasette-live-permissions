@@ -23,6 +23,36 @@ function lastPathPart() {
   return parts[parts.length-1];
 }
 
+/**
+ * Gets the datasette "base_url" setting, which is actually
+ * not a URL, but a path prefix, e.g., /datasette
+ */
+function get_base_url() {
+  // we can set it via a script in the template...
+  if (window.DATASETTE_BASE_URL) {
+    return window.DATASETTE_BASE_URL;
+  }
+  // we can pull it from the URL, by assuming the first
+  // path part should be the DB name, live_permissions
+  const parts = window.location.pathname.split("/")
+  // no path prefix, return blank not a slash
+  if (parts[0] == 'live_permissions') {
+    return '';
+  }
+  let already_seen = false;
+  const prefix = parts.map((part) => {
+    if (already_seen || (part === 'live_permissions')) {
+      already_seen = true;
+      return null;
+    }
+    return part;
+  }).filter(x=>x).join("/");
+  if (!prefix || !prefix.length) {
+    return '';
+  }
+  return `/${prefix}`;
+}
+
 async function deleteItem(e) {
   const parentEl = $(e.target.parentElement);
   const cols = parentEl.find("td.type-pk");
@@ -30,7 +60,8 @@ async function deleteItem(e) {
 
   const objId = cols[0].innerText.trim();
   const table = lastPathPart();
-  const url_path = `/-/live-permissions/${table}/${objId}`;
+  const base_url = get_base_url();
+  const url_path = `${base_url}/-/live-permissions/${table}/${objId}`;
 
   const response = await doDelete(url_path);
   if (response.status === 204) document.location.reload();
@@ -43,7 +74,8 @@ async function deleteItemDB(e) {
 
   const objId = cols[0].innerText.trim();
   const db_name = lastPathPart();
-  const url_path = `/-/live-permissions/db/manage/${db_name}`;
+  const base_url = get_base_url();
+  const url_path = `${base_url}/-/live-permissions/db/manage/${db_name}`;
 
   const response = await doDelete(url_path, {
     user_id: objId
@@ -116,10 +148,12 @@ function s2_process(type, data) {
 }
 
 function setup() {
+  const base_url = get_base_url();
+
   $('#actions-resources-id').select2({
     placeholder: 'Select an action',
     ajax: {
-      url: '/live_permissions/actions_resources.json',
+      url: `${base_url}/live_permissions/actions_resources.json`,
       dataType: 'json',
       data: s2_data.bind(this, 'action-resource'),
       processResults: s2_process.bind(this, 'action-resource')
@@ -129,7 +163,7 @@ function setup() {
   $('#user-id').select2({
     placeholder: 'Select a user',
     ajax: {
-      url: '/live_permissions/users.json',
+      url: `${base_url}/live_permissions/users.json`,
       dataType: 'json',
       data: s2_data.bind(this, 'user'),
       processResults: s2_process.bind(this, 'user')
@@ -139,7 +173,7 @@ function setup() {
   $('#group-id').select2({
     placeholder: 'Select a group',
     ajax: {
-      url: '/live_permissions/groups.json',
+      url: `${base_url}/live_permissions/groups.json`,
       dataType: 'json',
       data: s2_data.bind(this, 'group'),
       processResults: s2_process.bind(this, 'group'),
