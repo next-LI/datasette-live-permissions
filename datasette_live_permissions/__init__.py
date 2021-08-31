@@ -20,7 +20,9 @@ KNOWN_TABLES = [
 
 
 def get_db_path():
-    return os.path.join(DEFAULT_DBPATH, f"{DB_NAME}.db")
+    config = datasette.plugin_config("datasette-live-permissions") or {}
+    default_db_path = config.get("db_path", DEFAULT_DBPATH)
+    return os.path.join(default_db_path, f"{DB_NAME}.db")
 
 
 def get_db(datasette=None):
@@ -62,7 +64,7 @@ def make_query(preamble, key_values):
 
 
 def setup_default_permissions(datasette):
-    db = get_db()
+    db = get_db(datasette=datasette)
     ar_tbl = db["actions_resources"]
     users = db["users"]
     groups = db["groups"]
@@ -600,9 +602,9 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
 # TODO: permission lookup routine (looks permission and user)
 #   if not found: lookup user -> groups -> permission (join?)
 @hookimpl
-def permission_allowed(actor, action, resource):
+def permission_allowed(datasette, actor, action, resource):
     async def inner_permission_allowed():
-        db = get_db()
+        db = get_db(datasette=datasette)
         authed_users = bootstrap_and_fetch_users(db, actor)
         relevant_actions = bootstrap_and_fetch_actions_resources(
             db, action, resource
@@ -652,8 +654,7 @@ def register_routes():
 
 async def perms_crud(scope, receive, datasette, request):
     table = request.url_vars["table"]
-    default_next = datasette.urls.path(f"/live_permissions/{table}")
-    next = request.args.get("next", default_next)
+    next = request.args.get("next", f"/live_permissions/{table}")
     obj_id = request.url_vars["id"]
 
     if not await datasette.permission_allowed(
