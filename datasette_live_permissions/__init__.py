@@ -19,19 +19,19 @@ KNOWN_TABLES = [
 ]
 
 
-def get_db_path():
+def get_db_path(datasette):
     config = datasette.plugin_config("datasette-live-permissions") or {}
     default_db_path = config.get("db_path", DEFAULT_DBPATH)
     return os.path.join(default_db_path, f"{DB_NAME}.db")
 
 
-def get_db(datasette=None):
+def get_db(datasette):
     """
     Returns a sqlite_utils.Database, not datasette.Database, but a datasette
     Database can be got through datasette.databases[DB_NAME] after this runs.
     """
     # this will create the DB if not exists
-    database_path = get_db_path()
+    database_path = get_db_path(datasette)
     conn = sqlite3.connect(database_path)
     db = sqlite_utils.Database(conn)
     # just make it show up in the DBs list
@@ -64,7 +64,7 @@ def make_query(preamble, key_values):
 
 
 def setup_default_permissions(datasette):
-    db = get_db(datasette=datasette)
+    db = get_db(datasette)
     ar_tbl = db["actions_resources"]
     users = db["users"]
     groups = db["groups"]
@@ -252,11 +252,11 @@ def have_live_config_plugin(datasette):
     return False
 
 
-def create_tables(datasette=None):
+def create_tables(datasette):
     """
     Bootstrap all the tables and default users, groups and permissions.
     """
-    database = get_db(datasette=datasette)
+    database = get_db(datasette)
     table_names = database.table_names()
 
     # TODO: user lookup -> use a lookup table! then
@@ -399,7 +399,7 @@ def create_tables(datasette=None):
 def startup(datasette):
     async def inner():
         # db = get_or_create_db(datasette)
-        create_tables(datasette=datasette)
+        create_tables(datasette)
         # table_names = await db.table_names()
         # if "groups" not in table_names:
         #     await db.execute_write_fn(build_table)
@@ -604,7 +604,7 @@ def check_permission(actor, action, resource, db, authed_users, relevant_actions
 @hookimpl
 def permission_allowed(datasette, actor, action, resource):
     async def inner_permission_allowed():
-        db = get_db(datasette=datasette)
+        db = get_db(datasette)
         authed_users = bootstrap_and_fetch_users(db, actor)
         relevant_actions = bootstrap_and_fetch_actions_resources(
             db, action, resource
@@ -666,7 +666,7 @@ async def perms_crud(scope, receive, datasette, request):
     assert request.method in ["POST", "DELETE"], "Bad method"
     assert table in KNOWN_TABLES, "Bad table name provided"
 
-    db = get_db(datasette=datasette)
+    db = get_db(datasette)
     # POST is just dual update/create (depending on if id=="new")
     if request.method == "POST":
         formdata = await request.post_vars()
@@ -701,7 +701,7 @@ async def manage_db_group(scope, receive, datasette, request):
     ):
         raise Forbidden("Permission denied")
 
-    db = get_db(datasette=datasette)
+    db = get_db(datasette)
 
     group_id = None
     results = db["groups"].rows_where("name=?", [f"DB Access: {db_name}"])
