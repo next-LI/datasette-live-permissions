@@ -10,6 +10,10 @@ from datasette.utils.asgi import Response, Forbidden
 
 DB_NAME="live_permissions"
 DEFAULT_DBPATH="."
+BLOCKED_DB_ACTIONS = [
+    "live_permissions", "live_config",
+    "_internal", "_memory",
+]
 
 
 # used to check all required tables exist and for table specified
@@ -633,6 +637,9 @@ def menu_links(datasette, actor):
 @hookimpl
 def database_actions(datasette, actor, database):
     async def inner_database_actions():
+        # don't let people do these unsupported things
+        if database in BLOCKED_DB_ACTIONS:
+            return
         allowed = await datasette.permission_allowed(
             actor, "live-permissions-edit", database, default=False
         )
