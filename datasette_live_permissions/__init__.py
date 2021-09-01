@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sqlite3
+from urllib.parse import unquote_plus
 
 import sqlite_utils
 from datasette import hookimpl, database as ds_database
@@ -703,7 +704,7 @@ async def perms_crud(scope, receive, datasette, request):
 
 
 async def manage_db_group(scope, receive, datasette, request):
-    db_name = request.url_vars["database"]
+    db_name = unquote_plus(request.url_vars["database"])
     if not await datasette.permission_allowed(
         request.actor, "live-permissions-edit", db_name, default=False
     ):
@@ -717,7 +718,6 @@ async def manage_db_group(scope, receive, datasette, request):
         group_id = row["id"]
         break
 
-    print("db_name", db_name)
     assert db_name in datasette.databases, "Non-existant database!"
 
     if not group_id and db_name not in BLOCKED_DB_ACTIONS:
