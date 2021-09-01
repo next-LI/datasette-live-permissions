@@ -717,7 +717,13 @@ async def manage_db_group(scope, receive, datasette, request):
         group_id = row["id"]
         break
 
-    assert group_id, "Couldn't find DB access group!"
+    assert db_name in datasette.databases, "Non-existant database!"
+
+    if not group_id and db_name not in BLOCKED_DB_ACTIONS:
+        db["groups"].insert({
+            "name": f"DB Access: {db_name}",
+        }, pk="id", replace=True)
+        return await manage_db_group(scope, receive, datasette, request)
 
     if request.method in ["POST", "DELETE"]:
         formdata = await request.post_vars()
