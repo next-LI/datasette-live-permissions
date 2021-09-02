@@ -26,6 +26,10 @@ By default, the directory is assumed to be the current working directory that Da
 
 If you set this directory to somewhere what Datasette isn't expecting to look for databases, then you won't be able to change any permissions via the UI!
 
+## Permissions
+
+The ability to change permissions is determined by the `"live-permissions-edit"` permission. You can restrict permission to a specific DB with the `("live-permissions-edit", DB_NAME)` permission tuple.
+
 ## Development
 
 To set up this plugin locally, first checkout the code. Then create a new virtual environment:
