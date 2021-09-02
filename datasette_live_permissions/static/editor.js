@@ -50,7 +50,7 @@ function get_base_url() {
   if (!prefix || !prefix.length) {
     return '';
   }
-  return `/${prefix}`;
+  return `/${prefix}`.replace("//", "/");
 }
 
 async function deleteItem(e) {
