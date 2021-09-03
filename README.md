@@ -9,9 +9,17 @@ A Datasette plugin that allows you to dynamically set permissions for users, gro
 
 ## Installation
 
+Installing via GitHub is the simplest.
+
+    datasette install git+https://github.com/next-LI/datasette-live-permissions.git
+
+That's it! You can specify a version, branch or SHA1 by adding an `@` symbol followed by the identifier, e.g.: `@v1.0.8`
+
+## Development
+
 Install this plugin in the same environment as Datasette.
 
-    $ datasette install datasette-live-permissions
+    python setup.py install
 
 ## Usage
 
