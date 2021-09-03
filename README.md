@@ -26,7 +26,35 @@ By default, the directory is assumed to be the current working directory that Da
 
 If you set this directory to somewhere what Datasette isn't expecting to look for databases, then you won't be able to change any permissions via the UI!
 
-## Permissions
+
+## Setting Permissions
+
+Permissions in the permission database here, map back to permission check using Datasette's internal `datasette.permission_allowed` function.
+
+```
+await datasette.permission_allowed(
+    actor, "view-database", ("my-database","my-table")
+)
+```
+
+Is equivalent to the following row in the `actions_resources` table:
+
+```
+# Table: actions_resources (ids are arbitrary here)
+id, action, resource_primary, resource_secondary
+1, "view-database", "my-database", "my-table"
+```
+
+Leaving `resource_primary` and `resource_secondary` blank in any of these fields grants access to any permission checks regardless if that field is set or not. So, for example, to grant a user `view-database` access to al DBs and tables, you'd grant a user this `actions_resources` entry:
+
+```
+id, action, resource_primary, resource_secondary
+2, "view-database", null, null
+```
+
+Same goes for users. Setting a value of `null` with a lookup key, will grant access to any user with that key set on their actor object. Etc etc. Be careful how you use null in your permissions!
+
+## Permission Admins
 
 The ability to change permissions is determined by the `"live-permissions-edit"` permission. You can restrict permission to a specific DB with the `("live-permissions-edit", DB_NAME)` permission tuple.
 
