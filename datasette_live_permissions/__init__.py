@@ -659,6 +659,9 @@ def register_routes():
         (r"^/-/live-permissions/(?P<table>.*)/(?P<id>.*)/?$", perms_crud),
     ]
 
+@hookimpl
+def render_cell(value):
+    return 'Test'
 
 async def perms_crud(scope, receive, datasette, request):
     table = request.url_vars["table"]
