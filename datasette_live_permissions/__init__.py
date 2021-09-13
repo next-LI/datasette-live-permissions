@@ -661,7 +661,7 @@ def register_routes():
 
 @hookimpl
 def render_cell(value, column, table, database, datasette):
-    return ", ".join([value, column, table, database, datasette])
+    return ", ".join([str(value), str(column), str(table), str(database), str(datasette)])
 
 async def perms_crud(scope, receive, datasette, request):
     table = request.url_vars["table"]
