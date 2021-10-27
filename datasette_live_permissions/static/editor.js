@@ -90,6 +90,32 @@ function addTrashCans() {
   $('.delete-item-db').on("click", deleteItemDB);
 }
 
+function addResources(){
+  // hacky way of getting primary and secondary resources onto the page
+  const base_url = get_base_url();
+  let url = base_url+'/live_permissions/actions_resources.json?_shape=array&_size=max'
+  $.getJSON(url, data => {
+    data.forEach(item => {
+      div = $('a[href="/datasette/live_permissions/actions_resources/'+item['id']+'"]')
+      if (item['resource_primary'] != null) {
+        div.parent().append(' <em>[Primary: '+item['resource_primary']+']</em>');
+      }
+      if (item['resource_secondary'] != null) {
+        div.parent().append(' <em>[Secondary: '+item['resource_secondary']+']</em>');
+      }
+    })
+  }).done((data)=> {
+    $('#actions-resources-id').select2({
+      placeholder: {
+        id: '-1', // the value of the option
+        text: 'Select an option'
+      },
+      allowClear: true,
+      data: s2_process.bind(this, 'action-resource', data)()['results']
+    }).val(null).trigger('change');
+  })
+}
+
 function s2_data(type, params) {
   switch(type) {
     case 'action-resource':
@@ -150,15 +176,15 @@ function s2_process(type, data) {
 function setup() {
   const base_url = get_base_url();
 
-  $('#actions-resources-id').select2({
-    placeholder: 'Select an action',
-    ajax: {
-      url: `${base_url}/live_permissions/actions_resources.json`,
-      dataType: 'json',
-      data: s2_data.bind(this, 'action-resource'),
-      processResults: s2_process.bind(this, 'action-resource')
-    }
-  });
+  // $('#actions-resources-id').select2({
+  //   placeholder: 'Select an action',
+  //   ajax: {
+  //     url: `${base_url}/live_permissions/actions_resources.json`,
+  //     dataType: 'json',
+  //     data: s2_data.bind(this, 'action-resource'),
+  //     processResults: s2_process.bind(this, 'action-resource')
+  //   }
+  // });
 
   $('#user-id').select2({
     placeholder: 'Select a user',
@@ -179,8 +205,9 @@ function setup() {
       processResults: s2_process.bind(this, 'group'),
     }
   });
-
+  addResources();
   addTrashCans();
 }
 
 $(document).ready(setup);
+

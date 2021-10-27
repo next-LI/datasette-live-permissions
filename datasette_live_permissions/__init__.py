@@ -144,7 +144,7 @@ def setup_default_permissions(datasette):
         # default: deny,
         "action": "permissions-debug",
         "allow_groups": " or ".join([grp_is_admin, grp_is_perms_admin]),
-    },{
+    }, {
         # Ability to view and edit global configuration
         "action": "live-config",
         "allow_groups": " or ".join([grp_is_admin, grp_is_config_admin]),
