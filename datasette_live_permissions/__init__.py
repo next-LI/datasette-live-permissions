@@ -678,10 +678,11 @@ async def perms_crud(scope, receive, datasette, request):
     # POST is just dual update/create (depending on if id=="new")
     if request.method == "POST":
         formdata = await request.post_vars()
-
+        print('this is form data', formdata)
         if "csrftoken" in formdata:
             del formdata["csrftoken"]
-
+        if formdata["resource_secondary"] == '':
+            formdata["resource_secondary"] = None
         pk = "id"
         if table == "group_membership":
             pk = ("group_id", "user_id")

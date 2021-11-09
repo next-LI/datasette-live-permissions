@@ -95,15 +95,17 @@ function addResources(){
   const base_url = get_base_url();
   let url = base_url+'/live_permissions/actions_resources.json?_shape=array&_size=max'
   $.getJSON(url, data => {
-    data.forEach(item => {
-      div = $('a[href="/datasette/live_permissions/actions_resources/'+item['id']+'"]')
-      if (item['resource_primary'] != null) {
-        div.parent().append(' <em>[Primary: '+item['resource_primary']+']</em>');
-      }
-      if (item['resource_secondary'] != null) {
-        div.parent().append(' <em>[Secondary: '+item['resource_secondary']+']</em>');
-      }
-    })
+    if (window.location.toString().indexOf('actions_resources') == -1) {
+      data.forEach(item => {
+        div = $('a[href="/datasette/live_permissions/actions_resources/'+item['id']+'"]')
+        if (item['resource_primary'] != null) {
+          div.parent().append(' <em>[Primary: '+item['resource_primary']+']</em>');
+        }
+        if (item['resource_secondary'] != null) {
+          div.parent().append(' <em>[Secondary: '+item['resource_secondary']+']</em>');
+        }
+      })
+    }
   }).done((data)=> {
     $('#actions-resources-id').select2({
       placeholder: {
