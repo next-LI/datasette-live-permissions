@@ -681,8 +681,9 @@ async def perms_crud(scope, receive, datasette, request):
         print('this is form data', formdata)
         if "csrftoken" in formdata:
             del formdata["csrftoken"]
-        if formdata["resource_secondary"] == '':
-            formdata["resource_secondary"] = None
+        if "resource_secondary" in formdata:
+            if formdata["resource_secondary"] == '':
+                del formdata["resource_secondary"]
         pk = "id"
         if table == "group_membership":
             pk = ("group_id", "user_id")
